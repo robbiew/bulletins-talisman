@@ -5,7 +5,6 @@
 -------------------------------------------------------------------------------
 -- Features:
 --  Configurable light bar
---  Random menu background art
 --  New bulletin indicator
 -------------------------------------------------------------------------------
 -- Ensure that Lua 5.3, the LuaFileSystem (lfs) library is in your environment. 
@@ -13,27 +12,29 @@
 -- https://innovativeinnovation.github.io/ubuntu-setup/lua/luarocks.html     
 -------------------------------------------------------------------------------
 
--- Variables - Set these to your liking                                                                                      
-local menuOptions = {
+-- Variables - Set these to your liking  
+
+local bullPath = "/bbs/gfiles" -- no trailing slash
+
+-- Brackets are required for displayMenu coloring
+local menuOptions = { 
     [1] = "[1] about r3tr0x",
     [2] = "[2] about talisman",
     [3] = "[3] bbs history",
     ['Q'] = "[Q] quit"
 }
+-- Y position (row) 
 local menuPositions = {
-    [1] = 19,       -- row
-    [2] = 20,       -- row    
-    [3] = 21,       -- row
-    ['Q'] = 23      -- row
+    [1] = 19,      
+    [2] = 20,       
+    [3] = 21,      
+    ['Q'] = 23      
 }
 
--- Starting X position (column) for menuOptions
+-- X position (col) 
 local startX = 56   
 
-
-local lfs = require("lfs")
-
--- Define ANSI color codes
+-- Talisman Color Codes
 local colors = {
     foreground = {
         black = "|00", dark_blue = "|01", dark_green = "|02",
@@ -49,6 +50,18 @@ local colors = {
     }
 }
 
+-- Color states for selected and unselected items
+local selectedBgColor = colors.background.magenta
+local selectedFgColor = colors.foreground.light_red
+local unselectedFgColor = colors.foreground.dark_cyan
+local bracketColor = colors.foreground.light_red
+local numberColor = colors.foreground.grey
+
+-------------------------------------------------------------------------------
+-- Main Declarations & Functions
+-------------------------------------------------------------------------------
+
+local lfs = require("lfs")
 -- Define ANSI escape code for cursor positioning
 function positionCursor(row, col)
     bbs_write_string(string.format("\x1b[%d;%df", row, col))
@@ -74,7 +87,6 @@ function isNewBulletin(bulletinFile, lastOnTime)
     end
 end
 
-
 function displayMenu(selectedOption, lastOnTime)
     -- Find the length of the longest menu option
     local maxLength = 0
@@ -82,15 +94,14 @@ function displayMenu(selectedOption, lastOnTime)
         maxLength = math.max(maxLength, #option)
     end
     
-    -- Highlight the selected option
     for key, option in pairs(menuOptions) do
         local row = menuPositions[key]
         local isSelected = tostring(key) == selectedOption
-
         local asterisk = ""
+
         -- Only check for numeric keys, skip for 'Q'
         if tonumber(key) then
-            local bulletinFile = string.format("/bbs/gfiles/bulletin%d.ans", key)
+            local bulletinFile = string.format(bullPath .. "/bulletin%d.ans", key)
             if isNewBulletin(bulletinFile, lastOnTime) then
                 asterisk = "*"
             end
@@ -99,20 +110,18 @@ function displayMenu(selectedOption, lastOnTime)
         local displayText
         if isSelected then
             -- Color for selected item
-            displayText = colors.background.magenta .. colors.foreground.light_red .. " " .. option .. string.rep(" ", maxLength - #option + 1)
+            displayText = selectedBgColor .. selectedFgColor .. " " .. option .. string.rep(" ", maxLength - #option + 1)
         else
-            -- Splitting the option into parts: [1, item one
+            -- Color for unselected item
             local bracketOpen, number, rest = option:match("(%[)([^%]]+)(].+)")
             if bracketOpen and number and rest then
-                local colorBracket = colors.foreground.dark_cyan
-                local colorNumber = colors.foreground.light_cyan
-                local colorRest = colors.foreground.dark_cyan
+                local colorBracket = bracketColor
+                local colorNumber = numberColor
+                local colorRest = unselectedFgColor
 
                 -- Applying colors to each part
                 bracketOpen = colorBracket .. bracketOpen
                 number = colorNumber .. number
-
-                -- Separating the closing bracket from the rest
                 local closingBracket, restText = rest:match("(])(.+)")
                 closingBracket = colorBracket .. closingBracket
                 restText = colorRest .. restText
@@ -120,8 +129,7 @@ function displayMenu(selectedOption, lastOnTime)
                 -- Combining the parts
                 displayText = " " .. bracketOpen .. number .. closingBracket .. restText .. asterisk
             else
-                -- Fallback in case of pattern matching failure
-                displayText = " " .. colors.foreground.light_red .. option
+                displayText = " " .. unselectedFgColor .. option
             end
             displayText = displayText .. string.rep(" ", maxLength - #option + 1)
         end
@@ -148,38 +156,37 @@ bbs_write_string("\x1b[?25l") --hide the cursor
 bbs_display_gfile("bull-main")
 
 -- Main interaction loop
-local selected = '1' -- Start with the first option selected as a string
+local selected = '1'
 local running = true
 while running do
     displayMenu(selected, lastOnTimestamp)-- Display the menu with the current selection highlighted
-    local key = bbs_getchar() -- Wait for and get the user input
+    local key = bbs_getchar() 
 
     if key == '1' or key == '2' or key == '3' then
         selected = key
     elseif key:upper() == 'Q' then
-        running = false -- Quit the program
+        running = false 
     elseif key:upper() == 'A' then -- Up arrow logic
         if selected == '1' then
-            selected = 'Q' -- Move to 'Quit' if on first option
+            selected = 'Q' 
         elseif selected == 'Q' then
-            selected = '3' -- Move to last option if on 'Quit'
+            selected = '3' 
         else
             selected = tostring(tonumber(selected) - 1) -- Move up in the options
         end
     elseif key:upper() == 'B' then -- Down arrow logic
         if selected == 'Q' then
-            selected = '1' -- Move to first option if on 'Quit'
+            selected = '1' 
         elseif selected == '3' then
-            selected = 'Q' -- Move to 'Quit' if on last option
+            selected = 'Q' 
         else
-            selected = tostring(tonumber(selected) + 1) -- Move down in the options
+            selected = tostring(tonumber(selected) + 1) 
         end
     elseif key == 'enter' or key == '\013' then -- Enter key logic
-        -- Perform action based on selected menu item
         if selected == 'Q' then
-            running = false -- Quit the program
+            running = false 
         else
-            loadBulletin(tonumber(selected)) -- Load the selected bulletin
+            loadBulletin(tonumber(selected)) -- Move down in the options
         end
     end
 end
