@@ -24,6 +24,8 @@
 
 local bullPath = "/bbs/gfiles" -- no trailing slash
 local bullMain = "bull-main"
+local maxBulletinMainFiles = 2 -- Update this number based on how many bull-main files you have
+
 
 -- Brackets are required for displayMenu coloring!
 local menuOptions = {
@@ -98,6 +100,15 @@ function writeAtPosition(row, col, text)
     bbs_write_string(text)
 end
 
+-- Function to display a random bulletin main file
+function displayRandomBulletinMain()
+    local randomNumber = math.random(1, maxBulletinMainFiles)
+    local randomBulletinFile = string.format("%s%d", bullMain, randomNumber)
+
+    bbs_clear_screen()
+    bbs_display_gfile(randomBulletinFile)
+end
+
 -- Function to check if a bulletin is new
 function isNewBulletin(bulletinFile, lastOnTime)
     local fileAttr = lfs.attributes(bulletinFile)
@@ -165,7 +176,7 @@ function display_and_scroll_file(bulletinNumber)
         end
     until key == 'q' or key == 'Q' -- 'q', 'Q'
     bbs_clear_screen()
-    bbs_display_gfile(bullMain)
+    displayRandomBulletinMain()
 end
 
 function displayMenu(selectedOption, lastOnTime)
@@ -230,12 +241,12 @@ function loadBulletin(bulletinNumber)
     bbs_clear_screen()
     bbs_display_gfile_pause(bulletinFile)
     bbs_pause()
-    bbs_display_gfile(bullMain)
+    displayRandomBulletinMain()
 end
 
 -- Load the main screen once before entering the loop
 bbs_write_string("\x1b[?25l") --hide the cursor
-bbs_display_gfile(bullMain)
+displayRandomBulletinMain()
 
 -- Main interaction loop
 local selected = '1'
