@@ -1,52 +1,77 @@
-------------------------------------------------------------------------------- 
+-------------------------------------------------------------------------------
 -- Bulletins by j0hnny a1pha
 -- v.01
 -- For Talisman BBS
 -------------------------------------------------------------------------------
 -- Features:
---  Configurable light bar
---  New bulletin indicator
+--  Configurable light bar position & colors
+--  New bulletin indicator (asterisk)
+--  Page up/down
+--  Filters out SAUCE
 -------------------------------------------------------------------------------
--- Ensure that Lua 5.3, the LuaFileSystem (lfs) library is in your environment. 
--- You can install lfs with Luarocks:             
--- https://innovativeinnovation.github.io/ubuntu-setup/lua/luarocks.html     
+-- Special Note:
+-- Ensure that Lua 5.3, the LuaFileSystem (lfs) library is in your environment.
+-- You can install lfs with Luarocks:
+-- https://innovativeinnovation.github.io/ubuntu-setup/lua/luarocks.html
+-------------------------------------------------------------------------------
+-- Instructions:
+-- Create a main menu for the bulletin (e.g. bull-main.ans)
+-- Create individual bulletins (e.g.bulletin1.ans, bulletin2.ans, etc)
+-- Edit varaibles below to your liking
 -------------------------------------------------------------------------------
 
--- Variables - Set these to your liking  
+-- Variables - Set these to your liking
 
 local bullPath = "/bbs/gfiles" -- no trailing slash
+local bullMain = "bull-main"
 
--- Brackets are required for displayMenu coloring
-local menuOptions = { 
+-- Brackets are required for displayMenu coloring!
+local menuOptions = {
     [1] = "[1] about r3tr0x",
     [2] = "[2] about talisman",
     [3] = "[3] bbs history",
     ['Q'] = "[Q] quit"
 }
--- Y position (row) 
+-- Y position (row)
 local menuPositions = {
-    [1] = 19,      
-    [2] = 20,       
-    [3] = 21,      
-    ['Q'] = 23      
+    [1] = 19,
+    [2] = 20,
+    [3] = 21,
+    ['Q'] = 23
 }
 
--- X position (col) 
-local startX = 56   
+-- X position (col)
+local startX = 56
 
 -- Talisman Color Codes
 local colors = {
     foreground = {
-        black = "|00", dark_blue = "|01", dark_green = "|02",
-        dark_cyan = "|03", dark_red = "|04", dark_magenta = "|05",
-        brown = "|06", grey = "|07", dark_grey = "|08",
-        light_blue = "|09", light_green = "|10", light_cyan = "|11",
-        light_red = "|12", light_magenta = "|13", yellow = "|14",
+        black = "|00",
+        dark_blue = "|01",
+        dark_green = "|02",
+        dark_cyan = "|03",
+        dark_red = "|04",
+        dark_magenta = "|05",
+        brown = "|06",
+        grey = "|07",
+        dark_grey = "|08",
+        light_blue = "|09",
+        light_green = "|10",
+        light_cyan = "|11",
+        light_red = "|12",
+        light_magenta = "|13",
+        yellow = "|14",
         white = "|15"
     },
     background = {
-        black = "|16", blue = "|17", green = "|18", cyan = "|19",
-        red = "|20", magenta = "|21", brown = "|22", grey = "|23"
+        black = "|16",
+        blue = "|17",
+        green = "|18",
+        cyan = "|19",
+        red = "|20",
+        magenta = "|21",
+        brown = "|22",
+        grey = "|23"
     }
 }
 
@@ -58,7 +83,7 @@ local bracketColor = colors.foreground.light_red
 local numberColor = colors.foreground.grey
 
 -------------------------------------------------------------------------------
--- Main Declarations & Functions
+-- Main Declarations & Functions (no more config options below)
 -------------------------------------------------------------------------------
 
 local lfs = require("lfs")
@@ -78,13 +103,69 @@ function isNewBulletin(bulletinFile, lastOnTime)
     local fileAttr = lfs.attributes(bulletinFile)
     if fileAttr then
         local fileModTime = fileAttr.modification
-        --bbs_write_string(string.format("Debug: File: %s, ModTime: %s, LastOn: %s\n", 
-         --                              bulletinFile, tostring(fileModTime), tostring(lastOnTime)))
         return fileModTime >= lastOnTime
     else
         bbs_write_string("Error getting file attributes for " .. bulletinFile .. "\n")
         return false
     end
+end
+
+function display_and_scroll_file(bulletinNumber)
+    local bulletinFile = string.format(bullPath .. "/bulletin%d.ans", bulletinNumber)
+    local file = io.open(bulletinFile, "r")
+    if not file then
+        bbs_write_string("Error opening file: " .. bulletinFile .. "\r\n")
+        return
+    end
+
+    local content = file:read("*all")
+    file:close()
+
+    -- Check for and remove SAUCE record
+    local sauceStart = content:find("SAUCE00")
+    if sauceStart then
+        content = content:sub(1, sauceStart - 1)
+    end
+
+    -- Split the content into lines
+    local lines = {}
+    for line in content:gmatch("[^\r\n]+") do
+        table.insert(lines, line)
+    end
+
+    local pageSize = 23 -- Adjust this based on the user's actual screen size
+    local currentPage = 1
+    local totalPages = math.ceil(#lines / pageSize)
+
+    local function displayPage()
+        bbs_clear_screen()
+        for i = 1, pageSize do
+            local lineIndex = (currentPage - 1) * pageSize + i
+            if lines[lineIndex] then
+                bbs_write_string(lines[lineIndex] .. "\r\n")
+            end
+        end
+        bbs_write_string("-- Page " .. currentPage .. " of " .. totalPages .. " --\r\n")
+    end
+
+    local key
+    repeat
+        displayPage()
+        key = bbs_getchar()
+        bbs_write_string("Key pressed: " .. key .. " (Current page: " .. currentPage .. ")\r\n")
+
+        if key == 'B' then -- Assuming 'B' is the down arrow key code
+            if currentPage < totalPages then
+                currentPage = currentPage + 1
+            end
+        elseif key == 'A' then -- Assuming 'A' is the up arrow key code
+            if currentPage > 1 then
+                currentPage = currentPage - 1
+            end
+        end
+    until key == 'q' or key == 'Q' -- 'q', 'Q'
+    bbs_clear_screen()
+    bbs_display_gfile(bullMain)
 end
 
 function displayMenu(selectedOption, lastOnTime)
@@ -93,7 +174,7 @@ function displayMenu(selectedOption, lastOnTime)
     for _, option in pairs(menuOptions) do
         maxLength = math.max(maxLength, #option)
     end
-    
+
     for key, option in pairs(menuOptions) do
         local row = menuPositions[key]
         local isSelected = tostring(key) == selectedOption
@@ -127,7 +208,7 @@ function displayMenu(selectedOption, lastOnTime)
                 restText = colorRest .. restText
 
                 -- Combining the parts
-                displayText = " " .. bracketOpen .. number .. closingBracket .. restText .. asterisk
+                displayText = " " .. bracketOpen .. number .. closingBracket .. restText
             else
                 displayText = " " .. unselectedFgColor .. option
             end
@@ -135,7 +216,8 @@ function displayMenu(selectedOption, lastOnTime)
         end
 
         -- Write the option with the lightbar and then reset the background color
-        writeAtPosition(row, startX, displayText .. colors.background.black)
+        writeAtPosition(row, startX,
+            displayText .. colors.background.black .. " " .. colors.foreground.dark_red .. asterisk)
     end
 end
 
@@ -148,45 +230,46 @@ function loadBulletin(bulletinNumber)
     bbs_clear_screen()
     bbs_display_gfile_pause(bulletinFile)
     bbs_pause()
-    bbs_display_gfile("bull-main")
+    bbs_display_gfile(bullMain)
 end
 
 -- Load the main screen once before entering the loop
 bbs_write_string("\x1b[?25l") --hide the cursor
-bbs_display_gfile("bull-main")
+bbs_display_gfile(bullMain)
 
 -- Main interaction loop
 local selected = '1'
 local running = true
 while running do
-    displayMenu(selected, lastOnTimestamp)-- Display the menu with the current selection highlighted
-    local key = bbs_getchar() 
+    displayMenu(selected, lastOnTimestamp) -- Display the menu with the current selection highlighted
+    local key = bbs_getchar()
 
     if key == '1' or key == '2' or key == '3' then
         selected = key
     elseif key:upper() == 'Q' then
-        running = false 
+        running = false
     elseif key:upper() == 'A' then -- Up arrow logic
         if selected == '1' then
-            selected = 'Q' 
+            selected = 'Q'
         elseif selected == 'Q' then
-            selected = '3' 
+            selected = '3'
         else
             selected = tostring(tonumber(selected) - 1) -- Move up in the options
         end
-    elseif key:upper() == 'B' then -- Down arrow logic
+    elseif key:upper() == 'B' then                      -- Down arrow logic
         if selected == 'Q' then
-            selected = '1' 
+            selected = '1'
         elseif selected == '3' then
-            selected = 'Q' 
+            selected = 'Q'
         else
-            selected = tostring(tonumber(selected) + 1) 
+            selected = tostring(tonumber(selected) + 1)
         end
     elseif key == 'enter' or key == '\013' then -- Enter key logic
         if selected == 'Q' then
-            running = false 
+            running = false
         else
-            loadBulletin(tonumber(selected)) -- Move down in the options
+            -- loadBulletin(tonumber(selected))
+            display_and_scroll_file(tonumber(selected))
         end
     end
 end
