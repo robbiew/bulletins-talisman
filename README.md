@@ -1,2 +1,5 @@
 # bulletins-talisman
- An Luascript alternative to Talisman BBS' built-in 'bulletins' menu.
+ A Luascript alternative to Talisman BBS' built-in 'bulletins' menu.
+
+# INstallation & Usage
+ See comments in lua file
