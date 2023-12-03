@@ -7,7 +7,8 @@
 --  Configurable light bar position & colors
 --  New bulletin indicator (asterisk)
 --  Page up/down
---  Filters out SAUCE
+--  Filters out SAUCE records
+--  Random menu art
 -------------------------------------------------------------------------------
 -- Special Note:
 -- Ensure that Lua 5.3, the LuaFileSystem (lfs) library is in your environment.
@@ -15,7 +16,7 @@
 -- https://innovativeinnovation.github.io/ubuntu-setup/lua/luarocks.html
 -------------------------------------------------------------------------------
 -- Instructions:
--- Create a main menu for the bulletin (e.g. bull-main.ans)
+-- Create menus art for the bulletin (e.g. bull-main1.ans, bull-main2.ans, etc)
 -- Create individual bulletins (e.g.bulletin1.ans, bulletin2.ans, etc)
 -- Edit varaibles below to your liking
 -------------------------------------------------------------------------------
@@ -25,7 +26,6 @@
 local bullPath = "/bbs/gfiles" -- no trailing slash
 local bullMain = "bull-main"
 local maxBulletinMainFiles = 2 -- Update this number based on how many bull-main files you have
-
 
 -- Brackets are required for displayMenu coloring!
 local menuOptions = {
@@ -87,6 +87,8 @@ local numberColor = colors.foreground.grey
 -------------------------------------------------------------------------------
 -- Main Declarations & Functions (no more config options below)
 -------------------------------------------------------------------------------
+local maxCols = math.floor(bbs_get_term_width() + 0.5) -- convert float to integer
+local maxRows = math.floor(bbs_get_term_height() + 0.5) -- convert float to integer
 
 local lfs = require("lfs")
 -- Define ANSI escape code for cursor positioning
@@ -144,7 +146,7 @@ function display_and_scroll_file(bulletinNumber)
         table.insert(lines, line)
     end
 
-    local pageSize = 23 -- Adjust this based on the user's actual screen size
+    local pageSize = maxRows - 1
     local currentPage = 1
     local totalPages = math.ceil(#lines / pageSize)
 
@@ -153,28 +155,49 @@ function display_and_scroll_file(bulletinNumber)
         for i = 1, pageSize do
             local lineIndex = (currentPage - 1) * pageSize + i
             if lines[lineIndex] then
-                bbs_write_string(lines[lineIndex] .. "\r\n")
+                if lineIndex == totalLines then
+                    -- If it's the last line, do not append "\r\n"
+                    bbs_write_string(lines[lineIndex])
+                else
+                    bbs_write_string(lines[lineIndex] .. "\r\n")
+                end
             end
         end
-        bbs_write_string("-- Page " .. currentPage .. " of " .. totalPages .. " --\r\n")
+        bbs_write_string("\x1b[" .. maxRows .. ";1f")
+        local pageInfo = colors.background.magenta ..
+        colors.foreground.white .. " Page " .. currentPage .. " of " .. totalPages
+        bbs_display_gfile("footer")
+        bbs_write_string("\x1b[" .. maxRows .. ";1f")
+        bbs_write_string(pageInfo)
+        bbs_write_string("|00") -- Reset to default colors
     end
+
+    -- Initially display the first page
+    displayPage()
 
     local key
     repeat
-        displayPage()
         key = bbs_getchar()
-        bbs_write_string("Key pressed: " .. key .. " (Current page: " .. currentPage .. ")\r\n")
 
-        if key == 'B' then -- Assuming 'B' is the down arrow key code
+        local pageChanged = false
+        if key:upper() == 'B' then -- Down arrow
             if currentPage < totalPages then
                 currentPage = currentPage + 1
+                pageChanged = true
             end
-        elseif key == 'A' then -- Assuming 'A' is the up arrow key code
+        elseif key:upper() == 'A' then -- Up arrow
             if currentPage > 1 then
                 currentPage = currentPage - 1
+                pageChanged = true
             end
         end
+
+        -- Redraw the page only if it changed
+        if pageChanged then
+            displayPage()
+        end
     until key == 'q' or key == 'Q' -- 'q', 'Q'
+
     bbs_clear_screen()
     displayRandomBulletinMain()
 end
@@ -287,4 +310,3 @@ end
 
 -- Make sure to exit cleanly
 bbs_write_string("\x1b[?25h") --show the cursor
-bbs_write_string("Exiting bulletin viewer...")
