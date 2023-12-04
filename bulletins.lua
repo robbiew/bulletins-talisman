@@ -6,7 +6,7 @@
 -- Features:
 --  Configurable light bar position & colors
 --  New bulletin indicator (asterisk)
---  Page up/down when viewing longer bulletins
+--  Page up/down
 --  Filters out SAUCE records
 --  Random menu art
 -------------------------------------------------------------------------------
