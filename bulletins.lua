@@ -1,49 +1,42 @@
--------------------------------------------------------------------------------
+-- About -----------------------------------------------------------------------
 -- Bulletins by j0hnny a1pha
 -- v.01
 -- For Talisman BBS
--------------------------------------------------------------------------------
--- Features:
+--------------------------------------------------------------------------------
+
+-- Features --------------------------------------------------------------------
+--  Reads talisman.ini paths, bulletins.toml
 --  Configurable light bar position & colors
---  New bulletin indicator (asterisk)
---  Page up/down
---  Filters out SAUCE records
+--  New bulletin since last logon indicator (asterisk)
+--  Page up/down for full-screen reading
+--  Filters out SAUCE records from ANSI art
 --  Random menu art
--------------------------------------------------------------------------------
--- Special Note:
--- Ensure that Lua 5.3, the LuaFileSystem (lfs) library is in your environment.
--- You can install lfs with Luarocks:
--- https://innovativeinnovation.github.io/ubuntu-setup/lua/luarocks.html
--------------------------------------------------------------------------------
--- Instructions:
+--------------------------------------------------------------------------------
+
+-- Requirements ----------------------------------------------------------------
+-- Lua 5.3 installed (not 5.4):
+--      `sudo apt install lua5.3`
+-- The LuaFileSystem (lfs) library is in your environment:
+--      https://github.com/lunarmodules/luafilesystem
+-- TOML parser library is in your environment:
+--      https://github.com/LebJe/toml.lua
+--------------------------------------------------------------------------------
+
+-- Instructions ----------------------------------------------------------------
 -- Create menus art for the bulletin (e.g. bull-main1.ans, bull-main2.ans, etc)
 -- Create individual bulletins (e.g.bulletin1.ans, bulletin2.ans, etc)
+-- Add bulletin config to Talisman's data/bulletins.toml file
 -- Edit varaibles below to your liking
--------------------------------------------------------------------------------
+--------------------------------------------------------------------------------
 
--- Variables - Set these to your liking
+-- Variables -------------------------------------------------------------------
+local iniPath = "/bbs/talisman.ini"     -- path to Talisman config file
+local bullMain = "bull-main"            -- name menu files "bull-main1.ans" etc
+local maxBulletinMainFiles = 2          -- How many random bull-main files
 
-local bullPath = "/bbs/gfiles" -- no trailing slash
-local bullMain = "bull-main"
-local maxBulletinMainFiles = 2 -- Update this number based on how many bull-main files you have
-
--- Brackets are required for displayMenu coloring!
-local menuOptions = {
-    [1] = "[1] about r3tr0x",
-    [2] = "[2] about talisman",
-    [3] = "[3] bbs history",
-    ['Q'] = "[Q] quit"
-}
--- Y position (row)
-local menuPositions = {
-    [1] = 19,
-    [2] = 20,
-    [3] = 21,
-    ['Q'] = 23
-}
-
--- X position (col)
+-- X & Y menu positions (row & col)
 local startX = 56
+local startY = 19
 
 -- Talisman Color Codes
 local colors = {
@@ -83,14 +76,103 @@ local selectedFgColor = colors.foreground.light_red
 local unselectedFgColor = colors.foreground.dark_cyan
 local bracketColor = colors.foreground.light_red
 local numberColor = colors.foreground.grey
+-------------------------------------------------------------------------------
 
 -------------------------------------------------------------------------------
 -- Main Declarations & Functions (no more config options below)
 -------------------------------------------------------------------------------
-local maxCols = math.floor(bbs_get_term_width() + 0.5) -- convert float to integer
-local maxRows = math.floor(bbs_get_term_height() + 0.5) -- convert float to integer
+
+local maxCols =  math.floor(bbs_get_term_width()+0.5)  -- convert float to integer
+local maxRows =  math.floor(bbs_get_term_height()+0.5) -- convert float to integer
 
 local lfs = require("lfs")
+local toml = require("toml")
+
+
+-- Function to read and parse the Talisman.ini configuration file
+function parseIniFile(filePath)
+    local file = io.open(filePath, "r")
+    if not file then
+        error("Unable to open file: " .. filePath)
+        return nil
+    end
+
+    local data = {}
+    local currentSection
+    for line in file:lines() do
+        -- Check if line is a comment
+        if not line:match("^;") then
+            if line:match("^%[.-%]$") then
+                -- New section
+                currentSection = line:match("^%[(.-)%]$")
+                data[currentSection] = {}
+            elseif line:match("^[%w_ ]+%s*=%s*.+") then
+                -- Key-value pair
+                local key, value = line:match("([%w_ ]+)%s*=%s*(.+)")
+                key = key:match("^%s*(.-)%s*$")  -- Trim leading and trailing spaces
+                if currentSection then
+                    data[currentSection][key] = value
+                else
+                    data[key] = value
+                end
+            end
+        end
+    end
+
+    file:close()
+    return data
+end
+
+-- Function to read and parse the Bulletins TOML configuration file
+function readBulletinConfig(configFilePath)
+    local file = io.open(configFilePath, "r")
+    if not file then
+        error("Unable to open TOML config file: " .. configFilePath)
+        return nil
+    end
+
+    local content = file:read("*all")
+    file:close()
+
+    local succeeded, parsedData = pcall(toml.decode, content)
+    if not succeeded then
+        error("Error parsing TOML file: " .. parsedData)  -- parsedData contains the error message
+    end
+    return parsedData
+end
+
+-- Function to dynamically create menu options from TOML data
+function createMenuOptionsFromToml(tomlData)
+    local menuOptions = {}
+    local menuPositions = {}
+    local yPos = startY  -- Starting Y position (row) for menu options
+
+    for _, bulletin in ipairs(tomlData.bulletin) do
+        local key = bulletin.hotkey
+        local name = bulletin.name
+        local secLevel = bulletin.sec_level  -- You can use this for access control if needed
+
+        menuOptions[key] = "[" .. key .. "] " .. name
+        menuPositions[key] = yPos
+        yPos = yPos + 1
+    end
+
+    -- Add the quit option
+    menuOptions['Q'] = "[Q] Quit"
+    menuPositions['Q'] = yPos
+
+    return menuOptions, menuPositions
+end
+
+-- Read the Talisman configuration file and set paths
+local talismanConfig = parseIniFile(iniPath)
+local gfilesPath = talismanConfig.paths and talismanConfig.paths["gfiles path"]
+local dataPath = talismanConfig.paths and talismanConfig.paths["data path"]
+
+-- Read the Bulletin TOML configuration file and create menu options
+local tomlData = readBulletinConfig(dataPath .. "/bulletins.toml")
+menuOptions, menuPositions = createMenuOptionsFromToml(tomlData)
+
 -- Define ANSI escape code for cursor positioning
 function positionCursor(row, col)
     bbs_write_string(string.format("\x1b[%d;%df", row, col))
@@ -124,7 +206,7 @@ function isNewBulletin(bulletinFile, lastOnTime)
 end
 
 function display_and_scroll_file(bulletinNumber)
-    local bulletinFile = string.format(bullPath .. "/bulletin%d.ans", bulletinNumber)
+    local bulletinFile = string.format(gfilesPath .. "/bulletin%d.ans", bulletinNumber)
     local file = io.open(bulletinFile, "r")
     if not file then
         bbs_write_string("Error opening file: " .. bulletinFile .. "\r\n")
@@ -137,7 +219,7 @@ function display_and_scroll_file(bulletinNumber)
     -- Check for and remove SAUCE record
     local sauceStart = content:find("SAUCE00")
     if sauceStart then
-        content = content:sub(1, sauceStart - 1)
+        content = content:sub(1, sauceStart - 2)
     end
 
     -- Split the content into lines
@@ -146,7 +228,7 @@ function display_and_scroll_file(bulletinNumber)
         table.insert(lines, line)
     end
 
-    local pageSize = maxRows - 1
+    local pageSize = maxRows-1
     local currentPage = 1
     local totalPages = math.ceil(#lines / pageSize)
 
@@ -163,13 +245,12 @@ function display_and_scroll_file(bulletinNumber)
                 end
             end
         end
-        bbs_write_string("\x1b[" .. maxRows .. ";1f")
-        local pageInfo = colors.background.magenta ..
-        colors.foreground.white .. " Page " .. currentPage .. " of " .. totalPages
+        bbs_write_string("\x1b[".. maxRows .. ";1f")
+        local pageInfo = colors.background.magenta .. colors.foreground.white .. " Page " .. currentPage .. " of " .. totalPages
         bbs_display_gfile("footer")
-        bbs_write_string("\x1b[" .. maxRows .. ";1f")
+        bbs_write_string("\x1b[".. maxRows .. ";1f")
         bbs_write_string(pageInfo)
-        bbs_write_string("|00") -- Reset to default colors
+        bbs_write_string("|00")  -- Reset to default colors
     end
 
     -- Initially display the first page
@@ -196,6 +277,7 @@ function display_and_scroll_file(bulletinNumber)
         if pageChanged then
             displayPage()
         end
+
     until key == 'q' or key == 'Q' -- 'q', 'Q'
 
     bbs_clear_screen()
@@ -216,7 +298,7 @@ function displayMenu(selectedOption, lastOnTime)
 
         -- Only check for numeric keys, skip for 'Q'
         if tonumber(key) then
-            local bulletinFile = string.format(bullPath .. "/bulletin%d.ans", key)
+            local bulletinFile = string.format(gfilesPath .. "/bulletin%d.ans", key)
             if isNewBulletin(bulletinFile, lastOnTime) then
                 asterisk = "*"
             end
@@ -271,7 +353,8 @@ end
 bbs_write_string("\x1b[?25l") --hide the cursor
 displayRandomBulletinMain()
 
--- Main interaction loop
+-- Main interaction loop -------------------------------------------------------
+
 local selected = '1'
 local running = true
 while running do
