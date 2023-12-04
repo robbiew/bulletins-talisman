@@ -5,9 +5,9 @@ A Luascript alternative to Talisman BBS' built-in 'bulletins' menu.
 
 
 # About 
-- Bulletins by j0hnny a1pha
-- v.01
-- For Talisman BBS
+- Bulletins by j0hnny a1pha (aka robbiew)
+- v.01 - initial alpha release
+- For [Talisman](http://talismanbbs.com) BBS only!
 
 
 # Features 
